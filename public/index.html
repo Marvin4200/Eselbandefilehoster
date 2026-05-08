@@ -31,6 +31,15 @@
 
     .wrap { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
 
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .8rem; font-weight: 500; color: var(--muted);
+      text-decoration: none; transition: color .15s;
+      position: absolute; top: 14px; left: 20px;
+    }
+    .back-link:hover { color: var(--text); }
+    .back-link svg { flex-shrink: 0; }
+
     header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 28px 0 32px; border-bottom: 1px solid var(--border); margin-bottom: 36px;
@@ -136,6 +145,10 @@
 </head>
 <body>
 <div class="wrap">
+  <a href="https://eselbande.com" class="back-link">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    eselbande.com
+  </a>
   <header>
     <div class="logo">files<span>.eselbande.com</span></div>
     <div id="header-auth"></div>
