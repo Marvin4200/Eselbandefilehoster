@@ -31,14 +31,23 @@
 
     .wrap { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
 
-    .back-link {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: .8rem; font-weight: 500; color: var(--muted);
-      text-decoration: none; transition: color .15s;
-      position: absolute; top: 14px; left: 20px;
+    /* ── Topnav ── */
+    .topnav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.8rem 2rem;
+      background: rgba(8,8,16,0.7);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
     }
-    .back-link:hover { color: var(--text); }
-    .back-link svg { flex-shrink: 0; }
+    .nav-brand { font-weight: 700; font-size: 1rem; text-decoration: none; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+    .nav-links { display: flex; align-items: center; gap: 0.5rem; }
+    .nav-link {
+      padding: 0.35rem 0.9rem; border-radius: 7px; font-size: 0.8rem; font-weight: 600;
+      text-decoration: none; color: var(--muted); border: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .nav-link:hover { color: var(--text); border-color: rgba(255,255,255,0.12); }
 
     header {
       display: flex; align-items: center; justify-content: space-between;
@@ -144,11 +153,15 @@
   </style>
 </head>
 <body>
+<nav class="topnav">
+  <a class="nav-brand" href="https://eselbande.com">🫏 eselbande.com</a>
+  <div class="nav-links">
+    <a class="nav-link" href="https://go.eselbande.com">🔗 Links</a>
+    <a class="nav-link" href="https://quotes.eselbande.com">💬 Zitate</a>
+    <a class="nav-link" href="https://status.eselbande.com">📡 Status</a>
+  </div>
+</nav>
 <div class="wrap">
-  <a href="https://eselbande.com" class="back-link">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    eselbande.com
-  </a>
   <header>
     <div class="logo">files<span>.eselbande.com</span></div>
     <div id="header-auth"></div>
