@@ -102,31 +102,31 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
     if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-    // ── Rate limiting (in-memory, no external dependency) ─────────────────────────
-    const _rlStore = new Map();
-    setInterval(() => {
-        const now = Date.now();
-        for (const [k, v] of _rlStore) if (now > v.reset + 60_000) _rlStore.delete(k);
-    }, 5 * 60_000);
-    function rateLimit(max, windowMs) {
-        return (req, res, next) => {
-            const key = req.ip;
-            const now = Date.now();
-            const e = _rlStore.get(key) || { count: 0, reset: now + windowMs };
-            if (now > e.reset) { e.count = 0; e.reset = now + windowMs; }
-            if (++e.count > max) {
-                res.setHeader('Retry-After', Math.ceil((e.reset - now) / 1000));
-                return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte kurz.' });
-            }
-            _rlStore.set(key, e);
-            next();
-        };
-    }
-    const authLimiter   = rateLimit(20, 60_000);  // 20 auth attempts / min
-    const uploadLimiter = rateLimit(30, 60_000);  // 30 uploads / min
-
     next();
 }
+
+// ── Rate limiting (in-memory, no external dependency) ─────────────────────────
+const _rlStore = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _rlStore) if (now > v.reset + 60_000) _rlStore.delete(k);
+}, 5 * 60_000);
+function createRateLimiter(max, windowMs) {
+    return (req, res, next) => {
+        const key = req.ip;
+        const now = Date.now();
+        const e = _rlStore.get(key) || { count: 0, reset: now + windowMs };
+        if (now > e.reset) { e.count = 0; e.reset = now + windowMs; }
+        if (++e.count > max) {
+            res.setHeader('Retry-After', Math.ceil((e.reset - now) / 1000));
+            return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte kurz.' });
+        }
+        _rlStore.set(key, e);
+        next();
+    };
+}
+const authLimiter = createRateLimiter(20, 60_000);   // 20 auth attempts / min
+const uploadLimiter = createRateLimiter(30, 60_000); // 30 uploads / min
 
 function sanitizeFilename(name) {
     return path.basename(String(name || 'file'))
