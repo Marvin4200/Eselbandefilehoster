@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const session = require('express-session');
 const Database = require('better-sqlite3');
 const busboy = require('busboy');
@@ -20,6 +21,7 @@ if (SESSION_SECRET === 'changeme' && process.env.NODE_ENV === 'production') {
 }
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 const MAX_FILES_PER_USER = 200;
+const MAX_TOTAL_BYTES_PER_USER = 2 * 1024 * 1024 * 1024; // 2 GB per user
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 
 // MIME types and extensions that must never be served inline (XSS risk)
@@ -78,8 +80,11 @@ app.use((req, res, next) => {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        res.setHeader('Content-Security-Policy',
+            "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
     next();
 });
+app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(session({
@@ -97,6 +102,29 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
     if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+    // ── Rate limiting (in-memory, no external dependency) ─────────────────────────
+    const _rlStore = new Map();
+    setInterval(() => {
+        const now = Date.now();
+        for (const [k, v] of _rlStore) if (now > v.reset + 60_000) _rlStore.delete(k);
+    }, 5 * 60_000);
+    function rateLimit(max, windowMs) {
+        return (req, res, next) => {
+            const key = req.ip;
+            const now = Date.now();
+            const e = _rlStore.get(key) || { count: 0, reset: now + windowMs };
+            if (now > e.reset) { e.count = 0; e.reset = now + windowMs; }
+            if (++e.count > max) {
+                res.setHeader('Retry-After', Math.ceil((e.reset - now) / 1000));
+                return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte kurz.' });
+            }
+            _rlStore.set(key, e);
+            next();
+        };
+    }
+    const authLimiter   = rateLimit(20, 60_000);  // 20 auth attempts / min
+    const uploadLimiter = rateLimit(30, 60_000);  // 30 uploads / min
+
     next();
 }
 
@@ -124,7 +152,7 @@ app.get('/auth/login', (req, res) => {
     res.redirect(`https://discord.com/oauth2/authorize?${params}`);
 });
 
-app.get('/auth/callback', async (req, res) => {
+app.get('/auth/callback', authLimiter, async (req, res) => {
     const { code } = req.query;
     if (!code || typeof code !== 'string') return res.redirect('/?error=missing_code');
 
@@ -170,7 +198,11 @@ app.get('/auth/logout', (req, res) => {
 // ── API ───────────────────────────────────────────────────────────────────────
 app.get('/api/me', (req, res) => {
     if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
-    res.json(req.session.user);
+    const userId = req.session.user.id;
+    const { total_bytes } = db.prepare(
+        'SELECT COALESCE(SUM(size), 0) AS total_bytes FROM files WHERE user_id = ?'
+    ).get(userId);
+    res.json({ ...req.session.user, usedBytes: total_bytes, quotaBytes: MAX_TOTAL_BYTES_PER_USER });
 });
 
 app.get('/api/files', requireAuth, (req, res) => {
@@ -181,7 +213,7 @@ app.get('/api/files', requireAuth, (req, res) => {
 });
 
 // Upload via busboy — streams directly to disk, no temp file in memory
-app.post('/api/upload', requireAuth, (req, res) => {
+app.post('/api/upload', uploadLimiter, requireAuth, (req, res) => {
     const userId = req.session.user.id;
 
     const count = db.prepare('SELECT COUNT(*) as c FROM files WHERE user_id = ?').get(userId);
@@ -192,6 +224,14 @@ app.post('/api/upload', requireAuth, (req, res) => {
     const contentLength = parseInt(req.headers['content-length'] || '0', 10);
     if (contentLength > MAX_FILE_SIZE + 1024) {
         return res.status(413).json({ error: 'Datei zu groß (max 500 MB)' });
+        // Check per-user storage quota (2 GB)
+        const { total_bytes } = db.prepare(
+            'SELECT COALESCE(SUM(size), 0) AS total_bytes FROM files WHERE user_id = ?'
+        ).get(userId);
+        if (total_bytes + contentLength > MAX_TOTAL_BYTES_PER_USER) {
+            return res.status(413).json({ error: 'Speicherlimit erreicht (max. 2 GB pro Nutzer)' });
+        }
+
     }
 
     let bb;
@@ -219,7 +259,6 @@ app.post('/api/upload', requireAuth, (req, res) => {
         }
 
         const fileId = crypto.randomBytes(8).toString('hex');
-        const ext = path.extname(safeName);
         const storedName = `${fileId}${ext}`;
         const destPath = path.join(UPLOAD_DIR, storedName);
         const writeStream = fs.createWriteStream(destPath);
@@ -320,4 +359,11 @@ app.get('/f/:fileId/:filename?', (req, res) => {
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'filehoster', uptime: process.uptime() }));
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+// ── 404 & Error handlers ─────────────────────────────────────────────────────
+app.use((req, res) => res.status(404).json({ error: 'Nicht gefunden', path: req.path }));
+app.use((err, req, res, next) => {
+    console.error('[ERROR]', err.message);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+});
+
 app.listen(PORT, () => console.log(`[files.eselbande.com] Running on port ${PORT}`));
