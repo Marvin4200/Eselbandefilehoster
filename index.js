@@ -139,7 +139,7 @@ app.get('/auth/callback', async (req, res) => {
     }
 });
 
-app.post('/auth/logout', (req, res) => {
+app.get('/auth/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
