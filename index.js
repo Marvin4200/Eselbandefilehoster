@@ -15,9 +15,24 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'https://files.eselbande.com/auth/callback';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'changeme';
+if (SESSION_SECRET === 'changeme' && process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET must be set in production. Refusing to start.');
+}
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 const MAX_FILES_PER_USER = 200;
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
+
+// MIME types and extensions that must never be served inline (XSS risk)
+const BLOCKED_MIME_TYPES = new Set([
+    'text/html', 'application/xhtml+xml', 'text/xml', 'application/xml',
+    'image/svg+xml', 'application/javascript', 'text/javascript',
+    'application/x-javascript', 'text/vbscript', 'application/x-httpd-php',
+]);
+const BLOCKED_EXTENSIONS = new Set([
+    '.html', '.htm', '.xhtml', '.svg', '.xml', '.js', '.mjs', '.cjs',
+    '.php', '.php3', '.php4', '.php5', '.phtml', '.py', '.rb', '.sh',
+    '.bash', '.exe', '.bat', '.cmd', '.ps1', '.vbs', '.jar',
+]);
 
 // ── Storage dirs ─────────────────────────────────────────────────────────────
 const dataDir = path.join(__dirname, 'data');
@@ -56,6 +71,15 @@ db.exec(`
 // ── App ───────────────────────────────────────────────────────────────────────
 const app = express();
 app.set('trust proxy', 1);
+
+// Security headers (no external dependency)
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(session({
@@ -182,6 +206,18 @@ app.post('/api/upload', requireAuth, (req, res) => {
     bb.on('file', (fieldname, file, info) => {
         const { filename, mimeType } = info;
         const safeName = sanitizeFilename(filename || 'upload');
+        const ext = path.extname(safeName).toLowerCase();
+
+        // Block dangerous file types that could lead to XSS or RCE
+        if (BLOCKED_EXTENSIONS.has(ext) || BLOCKED_MIME_TYPES.has((mimeType || '').toLowerCase().split(';')[0].trim())) {
+            file.resume(); // drain the stream
+            if (!responded) {
+                responded = true;
+                return res.status(415).json({ error: 'Dieser Dateityp ist nicht erlaubt' });
+            }
+            return;
+        }
+
         const fileId = crypto.randomBytes(8).toString('hex');
         const ext = path.extname(safeName);
         const storedName = `${fileId}${ext}`;
@@ -265,9 +301,13 @@ app.get('/f/:fileId/:filename?', (req, res) => {
 
     db.prepare('UPDATE files SET downloads = downloads + 1 WHERE id = ?').run(file.id);
 
-    // Inline display for images/videos/audio/text; download otherwise
-    const inlineMimes = /^(image|video|audio|text)\//;
-    const disposition = inlineMimes.test(file.mime_type) ? 'inline' : 'attachment';
+    // Inline display for images/videos/audio; download otherwise.
+    // Never serve HTML/JS/SVG/XML inline (XSS risk).
+    const safeMime = file.mime_type.toLowerCase().split(';')[0].trim();
+    const safeExt = path.extname(file.stored_name).toLowerCase();
+    const isDangerous = BLOCKED_MIME_TYPES.has(safeMime) || BLOCKED_EXTENSIONS.has(safeExt);
+    const inlineMimes = /^(image|video|audio)\//;
+    const disposition = (!isDangerous && inlineMimes.test(safeMime)) ? 'inline' : 'attachment';
 
     res.setHeader('Content-Type', file.mime_type);
     res.setHeader('Content-Disposition', `${disposition}; filename="${file.orig_name}"`);
