@@ -276,5 +276,8 @@ app.get('/f/:fileId/:filename?', (req, res) => {
     fs.createReadStream(filePath).pipe(res);
 });
 
+// ── Health ───────────────────────────────────────────────────────────────────
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'filehoster', uptime: process.uptime() }));
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`[files.eselbande.com] Running on port ${PORT}`));
