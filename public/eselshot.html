@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EselShot – Screenshots teilen mit einem Klick</title>
+  <meta name="description" content="Screenshot aufnehmen, Bereich aufziehen, Link liegt sofort in der Zwischenablage – für die eselbande." />
+  <meta property="og:title" content="EselShot – Screenshots teilen mit einem Klick" />
+  <meta property="og:description" content="Screenshot aufnehmen, Bereich aufziehen, Link liegt sofort in der Zwischenablage." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://files.eselbande.com/eselshot" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #080810;
+      --surface:      rgba(255,255,255,0.04);
+      --surface2:     rgba(255,255,255,0.07);
+      --border:       rgba(255,255,255,0.08);
+      --border-hover: rgba(255,255,255,0.14);
+      --accent:       #818cf8;
+      --accent2:      #667eea;
+      --text:         #e2e8f0;
+      --muted:        #94a3b8;
+      --success:      #22c55e;
+    }
+
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse at 20% 10%, rgba(102,126,234,.10) 0%, transparent 55%),
+                  radial-gradient(ellipse at 85% 90%, rgba(139,92,246,.10) 0%, transparent 55%);
+    }
+
+    /* ── Topnav ── */
+    .topnav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.8rem 2rem;
+      background: rgba(8,8,16,0.7);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .nav-brand { font-weight: 700; font-size: 1rem; text-decoration: none; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+    .nav-links { display: flex; align-items: center; gap: 0.5rem; }
+    .nav-link {
+      padding: 0.35rem 0.9rem; border-radius: 7px; font-size: 0.8rem; font-weight: 600;
+      text-decoration: none; color: var(--muted); border: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--border-hover); }
+
+    .wrap { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 60px 24px 80px; }
+
+    /* ── Hero ── */
+    .hero { display: grid; grid-template-columns: 1fr auto; gap: 40px; align-items: center; margin-bottom: 64px; }
+    @media (max-width: 720px) { .hero { grid-template-columns: 1fr; text-align: center; } .hero-icon { justify-self: center; } }
+
+    .hero-title { font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 900; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 18px; }
+    .hero-title span { background: linear-gradient(135deg, var(--accent2), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero-sub { color: var(--muted); font-size: 1.15rem; line-height: 1.55; margin-bottom: 26px; max-width: 32em; }
+
+    .hero-icon {
+      width: 128px; height: 128px; border-radius: 28px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 20px 60px -20px rgba(129,140,248,.5);
+    }
+    .hero-icon svg { width: 68px; height: 68px; color: white; }
+
+    .cta-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    @media (max-width: 720px) { .cta-row { justify-content: center; } }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 0.95rem 1.5rem; border-radius: 10px; border: none; cursor: pointer;
+      font-size: 1rem; font-weight: 700; font-family: inherit; text-decoration: none;
+      transition: transform 0.1s, box-shadow 0.2s, opacity 0.15s;
+    }
+    .btn-primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); color: white; box-shadow: 0 10px 30px -10px rgba(129,140,248,.55); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -8px rgba(129,140,248,.7); }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--border-hover); }
+
+    .meta { font-size: 0.85rem; color: var(--muted); margin-top: 12px; }
+    .meta strong { color: var(--text); }
+
+    /* ── Features ── */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-bottom: 64px; }
+    .feature { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+    .feature-icon { font-size: 1.6rem; margin-bottom: 10px; }
+    .feature-title { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+    .feature-text { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+
+    /* ── Anleitung ── */
+    .section-title { font-size: 1.6rem; font-weight: 800; margin-bottom: 26px; }
+    .steps { display: grid; gap: 14px; margin-bottom: 64px; }
+    .step {
+      display: grid; grid-template-columns: 40px 1fr; gap: 18px; align-items: start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 22px;
+    }
+    .step-num {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      display: grid; place-items: center; font-weight: 800; color: white;
+    }
+    .step-title { font-weight: 700; margin-bottom: 5px; }
+    .step-text { color: var(--muted); font-size: .93rem; line-height: 1.55; }
+    .step-text a { color: var(--accent); text-decoration: none; }
+    .step-text a:hover { text-decoration: underline; }
+    .step-text kbd {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
+      padding: 1px 6px; font-family: ui-monospace, Consolas, monospace; font-size: .85em;
+    }
+
+    /* ── Hotkeys ── */
+    .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 64px; }
+    .key {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .key-label { color: var(--muted); font-size: .88rem; }
+    .key kbd {
+      background: var(--surface2); border: 1px solid var(--border-hover);
+      border-radius: 6px; padding: 3px 9px; font-family: ui-monospace, Consolas, monospace;
+      font-size: .82rem; color: var(--text); white-space: nowrap;
+    }
+
+    footer {
+      color: var(--muted); font-size: .82rem; text-align: center;
+      padding-top: 32px; border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 480px) {
+      .topnav { padding: 0.6rem 0.9rem; }
+      .nav-brand { font-size: 0.9rem; }
+      .nav-links { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; min-width: 0; }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-link { white-space: nowrap; padding: 0.28rem 0.55rem; font-size: 0.72rem; }
+      .wrap { padding: 40px 18px 60px; }
+    }
+  </style>
+</head>
+<body>
+<nav class="topnav">
+  <a class="nav-brand" href="https://eselbande.com">🫏 eselbande.com</a>
+  <div class="nav-links">
+    <a class="nav-link" href="/">📁 Dateien</a>
+    <a class="nav-link" href="https://go.eselbande.com">🔗 Links</a>
+    <a class="nav-link" href="https://esel.eselbande.com">🫏 Esel</a>
+    <a class="nav-link" href="https://quotes.eselbande.com">💬 Zitate</a>
+    <a class="nav-link" href="https://status.eselbande.com">📡 Status</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <h1 class="hero-title"><span>EselShot</span> – Screenshot machen, Link kopieren, fertig.</h1>
+      <p class="hero-sub">
+        Druck-Taste drücken, Bereich aufziehen, hochladen. Der Link zu deinem Bild
+        liegt sofort in der Zwischenablage – kein Speichern, kein Ziehen, kein Umweg.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="dl-btn" href="/download/EselShot-Setup.exe" download>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Für Windows herunterladen
+        </a>
+        <a class="btn btn-secondary" href="/">Meine Dateien</a>
+      </div>
+      <div class="meta">
+        <strong id="version-info">EselShot Setup</strong> · eigenständig, kein Python nötig ·
+        Quellcode im <a href="https://github.com/eselbande" style="color:var(--accent)">eselbande-Projekt</a>
+      </div>
+    </div>
+    <div class="hero-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature"><div class="feature-icon">🖱️</div><div class="feature-title">Wie Lightshot – nur eigen</div><div class="feature-text">Bereich aufziehen, Pfeile zeichnen, Text ergänzen. Sieben Farben, drei Strichstärken.</div></div>
+    <div class="feature"><div class="feature-icon">📋</div><div class="feature-title">Link sofort in der Zwischenablage</div><div class="feature-text">Nach dem Upload landet die URL direkt bei dir – einfach in Discord einfügen.</div></div>
+    <div class="feature"><div class="feature-icon">🔒</div><div class="feature-title">Dein Bild, dein Server</div><div class="feature-text">Bilder liegen auf <em>files.eselbande.com</em>, nur du kannst sie löschen. 2 GB Kontingent.</div></div>
+    <div class="feature"><div class="feature-icon">🚀</div><div class="feature-title">Startet mit Windows</div><div class="feature-text">Optional beim Anmelden mitstarten. Läuft leise im Infobereich neben der Uhr.</div></div>
+  </section>
+
+  <section>
+    <h2 class="section-title">In drei Schritten einsatzbereit</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-title">Setup herunterladen und ausführen</div>
+          <div class="step-text">Windows warnt beim ersten Start („SmartScreen") – „Weitere Informationen" → „Trotzdem ausführen". Der Installer fragt nach Desktop-Verknüpfung und Autostart und startet EselShot danach automatisch im Infobereich. Kein Zip, kein manuelles Entpacken.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-title">Token holen</div>
+          <div class="step-text">
+            <a href="/">files.eselbande.com</a> öffnen, mit Discord anmelden, in der Karte
+            <em>„🖥️ EselShot – API-Token"</em> auf <strong>+ Neues Token</strong> klicken und den Wert kopieren
+            – er wird nur einmal angezeigt.
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <div class="step-title">Token eintragen und loslegen</div>
+          <div class="step-text">
+            Rechtsklick auf das Tray-Symbol → <em>Einstellungen …</em>, Token einfügen,
+            <em>Verbindung testen</em>, <em>Speichern</em>. Danach: <kbd>Druck</kbd> drücken,
+            Bereich aufziehen, <em>Hochladen</em> – fertig.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Tastenkürzel</h2>
+    <div class="keys">
+      <div class="key"><span class="key-label">Bereich aufnehmen</span><kbd>Druck</kbd></div>
+      <div class="key"><span class="key-label">Bereich (Alternative)</span><kbd>Strg + ⇧ + S</kbd></div>
+      <div class="key"><span class="key-label">Ganzer Bildschirm</span><kbd>Strg + ⇧ + F</kbd></div>
+      <div class="key"><span class="key-label">Aktives Fenster</span><kbd>Strg + ⇧ + W</kbd></div>
+      <div class="key"><span class="key-label">In der Auswahl · hochladen</span><kbd>Enter</kbd></div>
+      <div class="key"><span class="key-label">In der Auswahl · Bild kopieren</span><kbd>Strg + C</kbd></div>
+      <div class="key"><span class="key-label">In der Auswahl · als PNG speichern</span><kbd>Strg + S</kbd></div>
+      <div class="key"><span class="key-label">In der Auswahl · Undo</span><kbd>Strg + Z</kbd></div>
+    </div>
+  </section>
+
+  <footer>
+    Aus dem <a href="https://eselbande.com">eselbande</a>-Projekt · Screenshots landen unter <a href="/">files.eselbande.com</a>
+  </footer>
+</div>
+
+<script>
+  fetch('/api/eselshot/version').then(r => r.json()).then(v => {
+    if (!v.available) return;
+    const mb = (v.size / 1024 / 1024).toFixed(1);
+    document.getElementById('version-info').textContent = `EselShot Setup · ${mb} MB · v${v.version}`;
+    // Versions-Query als Cache-Buster - der Download liegt hinter Cloudflare,
+    // das ihn bis zu 4 Stunden cached. Ohne das würde der Button nach einem
+    // frischen Release stundenlang die alte Datei ausliefern.
+    if (v.version) {
+      document.getElementById('dl-btn').href = `/download/EselShot-Setup.exe?v=${v.version}`;
+    }
+  }).catch(() => {});
+</script>
+</body>
+</html>
