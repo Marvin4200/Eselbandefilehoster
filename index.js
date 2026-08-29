@@ -12,15 +12,30 @@ const fs = require('fs');
 
 
 // ── Admin-Log ─────────────────────────────────────────────────────────────────
-// Faengt ab, was sonst nur im Container-Log verschwaende: unbehandelte
-// Fehler und Promise-Rejections landen jetzt sichtbar auf admin.eselbande.com,
-// zusaetzlich zu console.error. Best effort - ein Log-Sendefehler darf den
-// Dienst selbst nie beeintraechtigen.
+// Faengt praktisch alles ab: nicht nur Abstuerze, sondern auch die vielen
+// try/catch-Stellen im Code, die einen Fehler bisher nur lokal geloggt haben.
+// console.error/console.warn werden global umgeleitet - jeder Aufruf,
+// egal wo im Prozess, geht jetzt zusaetzlich an admin.eselbande.com.
 const ADMIN_LOG_URL = (process.env.ADMIN_LOG_URL || '').replace(/\/+$/, '');
 const LOG_INGEST_TOKEN = process.env.LOG_INGEST_TOKEN || '';
 
+// Ratenbegrenzung: waehrend eines Fehlersturms (z.B. eine haengende
+// Verbindung, die minuetlich denselben Fehler wirft) soll admin-dashboard
+// nicht mit hunderten Anfragen pro Minute geflutet werden. Token-Bucket:
+// 30 Log-Sendungen sofort verfuegbar, danach eine neue alle 2 Sekunden.
+let _logTokens = 30;
+setInterval(() => { _logTokens = Math.min(30, _logTokens + 1); }, 2000);
+let _logSuppressedSince = 0;
+
 async function logAdmin(type, title, description, color, fields) {
     if (!ADMIN_LOG_URL || !LOG_INGEST_TOKEN) return;
+    if (_logTokens <= 0) { _logSuppressedSince++; return; }
+    _logTokens--;
+    if (_logSuppressedSince > 0) {
+        const n = _logSuppressedSince;
+        _logSuppressedSince = 0;
+        logAdmin('SYSTEM', '\u{1F507} Logs gedrosselt', `${n} weitere Meldungen in kurzer Zeit wurden nicht einzeln gesendet (Ratenbegrenzung).`, 0xF59E0B);
+    }
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 5000);
@@ -31,18 +46,36 @@ async function logAdmin(type, title, description, color, fields) {
             signal: controller.signal,
         }).catch(() => {});
         clearTimeout(timer);
-    } catch { /* siehe oben */ }
+    } catch { /* ein Log-Sendefehler darf den Dienst selbst nie beeintraechtigen */ }
 }
+
+function _fmtConsoleArgs(args) {
+    return args.map(a => {
+        if (a instanceof Error) return a.stack || a.message;
+        if (a && typeof a === 'object') { try { return JSON.stringify(a); } catch { return String(a); } }
+        return String(a);
+    }).join(' ').slice(0, 4000);
+}
+
+const _origConsoleError = console.error.bind(console);
+const _origConsoleWarn = console.warn.bind(console);
+console.error = (...args) => {
+    _origConsoleError(...args);
+    logAdmin('ERRORS', '\u{26A0}\u{FE0F} Fehler', _fmtConsoleArgs(args), 0xED4245);
+};
+console.warn = (...args) => {
+    _origConsoleWarn(...args);
+    logAdmin('WARNINGS', '\u{26A0}\u{FE0F} Warnung', _fmtConsoleArgs(args), 0xF59E0B);
+};
 
 process.on('uncaughtException', (err) => {
     console.error('[uncaughtException]', err);
-    logAdmin('ERRORS', '\u{1F4A5} Uncaught Exception', `${err?.message || err}\n\`\`\`${String(err?.stack || '').slice(0, 1500)}\`\`\``, 0xED4245);
 });
 process.on('unhandledRejection', (reason) => {
     console.error('[unhandledRejection]', reason);
-    logAdmin('ERRORS', '\u{1F4A5} Unhandled Rejection', String(reason?.stack || reason).slice(0, 1500), 0xED4245);
 });
 logAdmin('SYSTEM', '\u{1F680} filehoster gestartet', `Prozess laeuft, PID ${process.pid}.`, 0x57F287);
+
 
 
 // ── Config ───────────────────────────────────────────────────────────────────
